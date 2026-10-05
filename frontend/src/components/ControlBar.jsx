@@ -8,6 +8,7 @@ import {
   VolumeX,
   Maximize,
   Minimize,
+  Share2,
   Loader2,
 } from "lucide-react";
 import { formatTime } from "../lib/format";
@@ -30,6 +31,7 @@ export default function ControlBar({
   onVolume,
   onToggleMute,
   onToggleFullscreen,
+  onShare,
 }) {
   const [showVolume, setShowVolume] = useState(false);
   const pct = duration > 0 ? (currentTime / duration) * 100 : 0;
@@ -171,6 +173,15 @@ export default function ControlBar({
                 />
               </div>
             </div>
+
+            <CircleBtn
+              testId="share-btn"
+              label="Share video link"
+              size={mid}
+              onClick={onShare}
+            >
+              <Share2 size={shortScreen ? 20 : 24} />
+            </CircleBtn>
 
             <CircleBtn
               testId="fullscreen-btn"

@@ -366,6 +366,49 @@ export default function CarPlayer() {
     toast("Recently played cleared");
   }, []);
 
+  const reorderQueue = useCallback((from, to) => {
+    setQueue((prev) => {
+      if (from < 0 || from >= prev.length || to < 0 || to >= prev.length || from === to) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+    setCurrentIndex((cur) => {
+      if (cur === from) return to;
+      if (from < cur && to >= cur) return cur - 1;
+      if (from > cur && to <= cur) return cur + 1;
+      return cur;
+    });
+  }, []);
+
+  const shareCurrent = useCallback(async () => {
+    if (!currentVideo) return;
+    const url = `${window.location.origin}/watch/${currentVideo.videoId}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: currentVideo.title, url });
+        return;
+      } catch {
+        return; // user cancelled
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success("Link copied to clipboard");
+    } catch {
+      toast(url);
+    }
+  }, [currentVideo]);
+
+  const closeCurrentVideo = useCallback(() => {
+    yt.pause();
+    setIsPlaying(false);
+    setCurrentIndex(-1);
+    setPlayerError(null);
+    if (routeVideoId) navigate("/");
+  }, [yt, navigate, routeVideoId]);
+
   const enterCarMode = useCallback(() => {
     setCarMode(true);
     const el = rootRef.current;
@@ -468,10 +511,12 @@ export default function CarPlayer() {
         visible={!hasVideo ? true : visible}
         shortScreen={shortScreen}
         carMode={carMode}
+        hasVideo={hasVideo}
         queueCount={queue.length}
         onOpenSearch={() => setSearchOpen(true)}
         onOpenQueue={() => setQueueOpen(true)}
         onOpenSettings={() => setSettingsOpen(true)}
+        onCloseVideo={closeCurrentVideo}
         onToggleCarMode={() => {
           const next = !carMode;
           setCarMode(next);
@@ -500,6 +545,7 @@ export default function CarPlayer() {
           onVolume={handleVolume}
           onToggleMute={handleToggleMute}
           onToggleFullscreen={handleToggleFullscreen}
+          onShare={shareCurrent}
         />
       )}
 
@@ -521,6 +567,7 @@ export default function CarPlayer() {
           setQueueOpen(false);
         }}
         onRemove={removeFromQueue}
+        onReorder={reorderQueue}
         onClear={clearQueue}
       />
       <SettingsPanel

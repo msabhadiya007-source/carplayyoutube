@@ -8,10 +8,13 @@ export default function SearchOverlay({ open, shortScreen, onClose, onPlay, onAd
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [nextToken, setNextToken] = useState(null);
   const [error, setError] = useState(null);
   const [searched, setSearched] = useState(false);
   const inputRef = useRef(null);
   const debounceRef = useRef(null);
+  const queryRef = useRef("");
 
   useEffect(() => {
     if (open) {
@@ -23,21 +26,43 @@ export default function SearchOverlay({ open, shortScreen, onClose, onPlay, onAd
     if (!q.trim()) {
       setResults([]);
       setSearched(false);
+      setNextToken(null);
       return;
     }
+    queryRef.current = q.trim();
     setLoading(true);
     setError(null);
     try {
       const data = await searchYoutube(q.trim());
-      setResults(data);
+      setResults(data.items || []);
+      setNextToken(data.nextPageToken || null);
       setSearched(true);
     } catch (err) {
       setError(humanizeApiError(err));
       setResults([]);
+      setNextToken(null);
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const loadMore = useCallback(async () => {
+    if (!nextToken || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const data = await searchYoutube(queryRef.current, nextToken);
+      setResults((prev) => {
+        const seen = new Set(prev.map((v) => v.videoId));
+        const fresh = (data.items || []).filter((v) => !seen.has(v.videoId));
+        return [...prev, ...fresh];
+      });
+      setNextToken(data.nextPageToken || null);
+    } catch {
+      /* keep existing results on load-more failure */
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [nextToken, loadingMore]);
 
   // Debounced auto-search
   useEffect(() => {
@@ -46,6 +71,7 @@ export default function SearchOverlay({ open, shortScreen, onClose, onPlay, onAd
       setResults([]);
       setSearched(false);
       setError(null);
+      setNextToken(null);
       return;
     }
     debounceRef.current = setTimeout(() => runSearch(query), 550);
@@ -169,20 +195,41 @@ export default function SearchOverlay({ open, shortScreen, onClose, onPlay, onAd
         )}
 
         {!loading && !error && results.length > 0 && (
-          <div
-            data-testid="search-results"
-            className="grid gap-4"
-            style={{ gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))" }}
-          >
-            {results.map((v) => (
-              <ResultCard
-                key={v.videoId}
-                video={v}
-                onPlay={() => onPlay(v)}
-                onAdd={() => onAddToQueue(v)}
-              />
-            ))}
-          </div>
+          <>
+            <div
+              data-testid="search-results"
+              className="grid gap-4"
+              style={{ gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))" }}
+            >
+              {results.map((v) => (
+                <ResultCard
+                  key={v.videoId}
+                  video={v}
+                  onPlay={() => onPlay(v)}
+                  onAdd={() => onAddToQueue(v)}
+                />
+              ))}
+            </div>
+            {nextToken && (
+              <div className="flex justify-center mt-6">
+                <button
+                  data-testid="load-more-btn"
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                  className="flex items-center gap-2 px-8 h-14 rounded-2xl font-display font-medium transition-transform active:scale-95 disabled:opacity-60"
+                  style={{ background: "var(--bg-surface-2)", border: "1px solid rgba(255,255,255,0.14)" }}
+                >
+                  {loadingMore ? (
+                    <>
+                      <Loader2 size={20} className="animate-spin" /> Loading...
+                    </>
+                  ) : (
+                    "Load more results"
+                  )}
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

@@ -1,15 +1,17 @@
 import React from "react";
-import { Search, ListMusic, Settings, Car } from "lucide-react";
+import { Search, ListMusic, Settings, Car, ChevronLeft } from "lucide-react";
 
 export default function Header({
   visible,
   shortScreen,
   carMode,
+  hasVideo,
   queueCount,
   onOpenSearch,
   onOpenQueue,
   onOpenSettings,
   onToggleCarMode,
+  onCloseVideo,
 }) {
   return (
     <header
@@ -24,6 +26,22 @@ export default function Header({
       }}
     >
       <div className="flex items-center gap-2 select-none">
+        {hasVideo && (
+          <button
+            data-testid="close-video-btn"
+            aria-label="Close video and go back"
+            onClick={onCloseVideo}
+            className="flex items-center justify-center rounded-full text-white transition-transform duration-150 active:scale-90 mr-1"
+            style={{
+              width: shortScreen ? 42 : 48,
+              height: shortScreen ? 42 : 48,
+              background: "rgba(26,26,32,0.7)",
+              border: "1px solid rgba(255,255,255,0.1)",
+            }}
+          >
+            <ChevronLeft size={shortScreen ? 22 : 26} />
+          </button>
+        )}
         <div
           className="flex items-center justify-center rounded-lg"
           style={{

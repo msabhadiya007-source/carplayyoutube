@@ -8,11 +8,11 @@ export async function getYoutubeStatus() {
   return data; // { configured: bool }
 }
 
-export async function searchYoutube(query) {
+export async function searchYoutube(query, pageToken) {
   const { data } = await axios.get(`${API}/youtube/search`, {
-    params: { q: query },
+    params: { q: query, ...(pageToken ? { pageToken } : {}) },
   });
-  return data; // VideoItem[]
+  return data; // { items: VideoItem[], nextPageToken?: string }
 }
 
 export async function getVideo(videoId) {

@@ -42,6 +42,11 @@ class VideoItem(BaseModel):
     publishedAt: Optional[str] = None
 
 
+class SearchResponse(BaseModel):
+    items: List[VideoItem]
+    nextPageToken: Optional[str] = None
+
+
 # ---------- Helpers ----------
 def iso_duration_to_seconds(iso: str) -> int:
     if not iso:
@@ -101,18 +106,26 @@ def youtube_status():
     return {"configured": get_api_key() is not None}
 
 
-@api_router.get("/youtube/search", response_model=List[VideoItem])
-def youtube_search(q: str = Query(..., min_length=1), maxResults: int = 24):
+@api_router.get("/youtube/search", response_model=SearchResponse)
+def youtube_search(
+    q: str = Query(..., min_length=1),
+    maxResults: int = 24,
+    pageToken: Optional[str] = None,
+):
     q = q.strip()
     if not q:
-        return []
-    data = youtube_get("search", {
+        return SearchResponse(items=[], nextPageToken=None)
+    params = {
         "part": "snippet",
         "q": q,
         "type": "video",
         "maxResults": min(max(maxResults, 1), 50),
         "videoEmbeddable": "true",
-    })
+    }
+    if pageToken:
+        params["pageToken"] = pageToken
+    data = youtube_get("search", params)
+    next_token = data.get("nextPageToken")
     items = data.get("items", [])
     video_ids = [it["id"]["videoId"] for it in items if it.get("id", {}).get("videoId")]
     durations = {}
@@ -141,7 +154,7 @@ def youtube_search(q: str = Query(..., min_length=1), maxResults: int = 24):
             durationSeconds=secs,
             publishedAt=snip.get("publishedAt"),
         ))
-    return results
+    return SearchResponse(items=results, nextPageToken=next_token)
 
 
 @api_router.get("/youtube/video/{video_id}", response_model=VideoItem)
