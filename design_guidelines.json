@@ -1,0 +1,108 @@
+{
+  "theme_strategy": {
+    "name": "Performance Pro / Tactical Minimalism",
+    "description": "Premium automotive dark mode designed for wide automotive displays (1920x600, 1280x480). Prioritizes extreme legibility, high contrast, low glare, and large touch targets. Built to feel native to a 2026 luxury EV infotainment system.",
+    "mode": "dark-only"
+  },
+  "colors": {
+    "background": {
+      "base": "#050507",
+      "surface_1": "#0F0F13",
+      "surface_2": "#1A1A20",
+      "surface_glass": "rgba(10, 10, 14, 0.85)"
+    },
+    "text": {
+      "primary": "#FFFFFF",
+      "secondary": "#A0A0AB",
+      "disabled": "#52525A"
+    },
+    "accents": {
+      "primary": "#00F0FF",
+      "primary_hover": "#33F3FF",
+      "danger": "#FF3B30",
+      "warning": "#FF9F0A"
+    },
+    "borders": {
+      "subtle": "rgba(255, 255, 255, 0.08)",
+      "focus": "rgba(0, 240, 255, 0.5)"
+    }
+  },
+  "typography": {
+    "font_family": {
+      "headings": "'Outfit', sans-serif",
+      "body": "'Chivo', sans-serif",
+      "mono": "'JetBrains Mono', monospace"
+    },
+    "scales": {
+      "h1": "text-4xl lg:text-5xl font-semibold tracking-tight",
+      "h2": "text-2xl lg:text-3xl font-medium tracking-tight",
+      "body": "text-lg md:text-xl font-normal text-secondary",
+      "labels": "text-xs md:text-sm uppercase tracking-[0.2em] text-secondary font-semibold"
+    }
+  },
+  "spacing_and_layout": {
+    "viewport_strategy": "Ultra-wide primary (1920x600, 1280x480). Flexbox and CSS Grid essential for horizontal flow. Maximize player area.",
+    "header": "Compact, 64px-80px height. Logo anchored left, Search trigger right. Glassmorphism background over player, z-index 40.",
+    "controls_bar": "Large bottom overlay. 96px-112px height. 48-72px touch targets for all buttons. Centered playback controls. z-index 40.",
+    "drawers": "Side panels (Search, Queue, Settings) slide in from right or left. Width 400px to 480px. High-opacity glass or solid dark surface. z-index 50.",
+    "player_container": "Takes up full remaining space (or absolute full screen underneath header/controls). Must support FIT/FILL/CROP modes.",
+    "safe_zones": "Add p-4 or p-6 padding to all screen edges to prevent touch targets from sitting exactly on hardware bezels."
+  },
+  "components": {
+    "buttons": {
+      "primary": "Large touch target (min w-16 h-16). Pill or circle shape. Background Accent or Surface_2 with 1px border. Icon size 28px-32px.",
+      "ghost": "Transparent background, hover state adds white/10. Active state scales down 95%."
+    },
+    "search_overlay": {
+      "layout": "Grid of large thumbnails (grid-cols-2 or grid-cols-3 depending on width). Massive search input field (text-3xl) with clear button.",
+      "results": "Thumbnails must be 16:9, title text-lg line-clamp-2, channel/duration text-sm text-secondary."
+    },
+    "queue_drawer": {
+      "layout": "Vertical list. Active item highlighted with Accent color border/text. Touch target height min 80px per row. Show thumbnail, title, channel."
+    },
+    "settings_panel": {
+      "layout": "Large toggle switches. Segmented controls for Fit/Fill/Crop. High contrast labels. Minimum height 64px per setting row."
+    }
+  },
+  "interactions_and_motion": {
+    "auto_hide": "Header and Controls MUST auto-hide after 3-5 seconds of inactivity. Tap anywhere on video to toggle visibility.",
+    "transitions": "Subtle and reduced. Use 'transition-opacity duration-300' for fading controls. Slide-in for drawers (duration-300 ease-out). No bouncy animations.",
+    "car_display_mode": "When active: Maximize player, absolute hide chrome (unless tapped), force highest contrast, disable non-essential animations."
+  },
+  "visual_enhancers": {
+    "glassmorphism": "Use backdrop-blur-xl bg-black/70. MUST include a 1px inner top border (border-t border-white/10) to separate from video underneath.",
+    "shadows": "Minimal. Rely on borders (border-subtle) and background differences for elevation. Car screens often wash out soft shadows."
+  },
+  "iconography": {
+    "library": "Phosphor Icons (@phosphor-icons/react)",
+    "style": "Weight 'regular' or 'fill' (for active states). High visibility. Size 24px - 32px depending on button scale."
+  },
+  "image_urls": {
+    "home_empty_state_background": {
+      "url": "https://images.pexels.com/photos/39815387/pexels-photo-39815387.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "Sleek dark automotive abstract background for home screen when no video is selected."
+    }
+  },
+  "accessibility": {
+    "touch_targets": "Minimum 48x48px, preferred 64x64px. No tiny hitboxes.",
+    "contrast": "Text must meet 7:1 contrast ratio against dark backgrounds for critical data. Use pure white (#FFFFFF) for primary text.",
+    "test_ids": "All interactive elements MUST include data-testid (e.g., 'play-pause-btn', 'search-input', 'queue-item')."
+  },
+  "instructions_to_main_agent": [
+    "Build a responsive SPA layout that acts as a full-viewport automotive app.",
+    "Do not use generic Shadcn components out-of-the-box without modifying them for massive touch targets (48px+).",
+    "Implement a robust 'AutoHide' hook or context to manage the visibility of the UI over the YouTube player based on mouse movement/touch.",
+    "The YouTube IFrame must be the lowest z-index layer, filling the screen. Header and Controls float above it.",
+    "Use Phosphor Icons for a crisp, automotive dashboard look.",
+    "Implement the Fit/Fill/Crop using CSS (e.g., object-fit equivalent for iframes, or wrapping div with overflow-hidden and absolute positioning scaling).",
+    "No ads, no marketing banners, no chat bubbles. This is a pure utility player."
+  ],
+  "universal_guidelines_for_main_agent": [
+    "Do not use default centered layouts. Keep text left-aligned unless it's a centered control bar.",
+    "Avoid generic 'AI slop' gradients. Stick to solid Matte Charcoal/Obsidian colors.",
+    "Create depth through layered z-index hierarchy and 1px subtle white/10 borders.",
+    "Do not apply `transition: all`. Target specific properties like `transition-opacity` or `transition-transform`.",
+    "Never use AI assistant emojis for icons.",
+    "Every interaction needs a micro-animation (e.g., active scale down `active:scale-95`)."
+  ]
+}
