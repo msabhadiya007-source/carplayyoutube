@@ -565,8 +565,8 @@ export default function CarPlayer() {
         </div>
       )}
 
-      {/* API key banner */}
-      {showKeyBanner && !keyConfigured && (
+      {/* API key banner (home only, so it never overlaps the control bar) */}
+      {showKeyBanner && !keyConfigured && !hasVideo && (
         <div
           data-testid="key-banner"
           className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[55] flex items-center gap-3 px-4 py-3 rounded-xl max-w-[92vw]"
@@ -577,6 +577,7 @@ export default function CarPlayer() {
             Live search is off. Add a YouTube Data API key as <code className="font-mono-nums">YOUTUBE_API_KEY</code> in backend/.env.
           </p>
           <button
+            data-testid="key-banner-dismiss"
             aria-label="Dismiss"
             onClick={() => setShowKeyBanner(false)}
             className="flex items-center justify-center rounded-full"
