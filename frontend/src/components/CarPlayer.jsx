@@ -171,7 +171,7 @@ export default function CarPlayer() {
   const onPlayerError = useCallback(() => {
     setLoading(false);
     setIsPlaying(false);
-    setPlayerError("Sorry, this video cannot be played. It may be unavailable or restricted.");
+    setPlayerError("This video cannot be played. Please choose another video.");
   }, []);
 
   const yt = useYouTubePlayer({

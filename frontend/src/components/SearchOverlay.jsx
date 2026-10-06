@@ -190,7 +190,7 @@ export default function SearchOverlay({ open, shortScreen, onClose, onPlay, onAd
 
         {!loading && !error && searched && results.length === 0 && (
           <div data-testid="search-empty" className="flex flex-col items-center justify-center py-16">
-            <p style={{ color: "var(--text-secondary)" }}>No results found. Try another search.</p>
+            <p style={{ color: "var(--text-secondary)" }}>No videos found. Try another search.</p>
           </div>
         )}
 
@@ -279,6 +279,9 @@ function ResultCard({ video, onPlay, onAdd }) {
           <p className="text-[15px] font-medium leading-snug line-clamp-2">{video.title}</p>
           <p className="text-sm mt-1 truncate" style={{ color: "var(--text-secondary)" }}>
             {video.channelTitle}
+            {video.publishedAt && (
+              <span> · {new Date(video.publishedAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}</span>
+            )}
           </p>
         </div>
         <button

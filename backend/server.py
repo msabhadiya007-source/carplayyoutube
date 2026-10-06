@@ -5,6 +5,7 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import re
+import time
 import logging
 from pathlib import Path
 from pydantic import BaseModel
@@ -24,6 +25,11 @@ app = FastAPI(title="CarPlayYouTube API")
 api_router = APIRouter(prefix="/api")
 
 YOUTUBE_API_BASE = "https://www.googleapis.com/youtube/v3"
+
+# Short-lived in-memory cache for identical searches (quota protection).
+_search_cache = {}
+_SEARCH_CACHE_TTL = 120  # seconds
+MAX_RESULTS_CAP = 20
 
 
 def get_api_key() -> Optional[str]:
@@ -108,18 +114,26 @@ def youtube_status():
 
 @api_router.get("/youtube/search", response_model=SearchResponse)
 def youtube_search(
-    q: str = Query(..., min_length=1),
-    maxResults: int = 24,
+    q: str = Query(..., min_length=1, max_length=100),
+    maxResults: int = 20,
     pageToken: Optional[str] = None,
 ):
     q = q.strip()
     if not q:
         return SearchResponse(items=[], nextPageToken=None)
+
+    capped = min(max(maxResults, 1), MAX_RESULTS_CAP)
+    cache_key = (q.lower(), pageToken or "", capped)
+    now = time.time()
+    cached = _search_cache.get(cache_key)
+    if cached and (now - cached[0] < _SEARCH_CACHE_TTL):
+        return cached[1]
+
     params = {
         "part": "snippet",
         "q": q,
         "type": "video",
-        "maxResults": min(max(maxResults, 1), 50),
+        "maxResults": capped,
         "videoEmbeddable": "true",
     }
     if pageToken:
@@ -154,7 +168,9 @@ def youtube_search(
             durationSeconds=secs,
             publishedAt=snip.get("publishedAt"),
         ))
-    return SearchResponse(items=results, nextPageToken=next_token)
+    response = SearchResponse(items=results, nextPageToken=next_token)
+    _search_cache[cache_key] = (now, response)
+    return response
 
 
 @api_router.get("/youtube/video/{video_id}", response_model=VideoItem)
