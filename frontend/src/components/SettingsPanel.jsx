@@ -1,5 +1,6 @@
 import React from "react";
-import { X, Car, Crop, Scan, Square, Maximize2, Trash2, History } from "lucide-react";
+import { Link } from "react-router-dom";
+import { X, Car, Crop, Maximize2, Square, Trash2, History, Monitor } from "lucide-react";
 
 const FIT_MODES = [
   { id: "fit", label: "Fit", icon: Square, hint: "Whole video" },
@@ -124,6 +125,22 @@ export default function SettingsPanel({
               Dark
             </span>
           </Row>
+
+          {/* Experimental: isolated Screen Size Mode (additive, does not change existing behavior) */}
+          <Link
+            to="/screen-size"
+            data-testid="open-screen-size-mode"
+            onClick={onClose}
+            className="w-full flex items-center justify-between gap-2 h-14 rounded-xl px-4 text-base transition-transform active:scale-95"
+            style={{ border: "1px solid rgba(0,240,255,0.35)", color: "var(--accent)" }}
+          >
+            <span className="flex items-center gap-2">
+              <Monitor size={20} /> Screen Size Mode
+            </span>
+            <span className="text-[10px] uppercase tracking-[0.2em]" style={{ color: "var(--text-secondary)" }}>
+              Experimental
+            </span>
+          </Link>
 
           {/* Danger actions */}
           <div className="pt-2 space-y-3">
