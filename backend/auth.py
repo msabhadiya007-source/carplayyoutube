@@ -13,6 +13,7 @@ JWT_ALGORITHM = "HS256"
 ACCESS_TTL = timedelta(minutes=15)
 REFRESH_TTL = timedelta(days=7)
 MAX_FAILED = 5
+MAX_FAILED_PER_EMAIL = 20
 LOCKOUT = timedelta(minutes=15)
 
 
@@ -128,26 +129,34 @@ def create_auth(db):
     @router.post("/login")
     async def login(body: LoginBody, request: Request, response: Response):
         email = body.email.lower().strip()
-        identifier = f"{_client_ip(request)}:{email}"
+        # Per IP+email (5) and per email regardless of IP (20, defeats X-Forwarded-For rotation).
+        limits = {f"{_client_ip(request)}:{email}": MAX_FAILED, f"email:{email}": MAX_FAILED_PER_EMAIL}
         now = datetime.now(timezone.utc)
-        attempt = await db.login_attempts.find_one({"identifier": identifier})
-        locked_until = attempt.get("locked_until") if attempt else None
-        if locked_until:
-            if locked_until.tzinfo is None:
+        attempts = {}
+        for identifier in limits:
+            attempt = await db.login_attempts.find_one({"identifier": identifier}) or {}
+            locked_until = attempt.get("locked_until")
+            if locked_until and locked_until.tzinfo is None:
                 locked_until = locked_until.replace(tzinfo=timezone.utc)
-            if locked_until > now:
+            if locked_until and locked_until > now:
                 raise HTTPException(status_code=429, detail="Too many failed attempts. Try again in 15 minutes.")
+            attempts[identifier] = 0 if locked_until else attempt.get("count", 0)
         user = await db.users.find_one({"email": email})
         if not user or not verify_password(body.password, user["password_hash"]):
-            count = (attempt.get("count", 0) if attempt and not locked_until else 0) + 1
-            update = {"count": count, "updated_at": now, "locked_until": None}
-            if count >= MAX_FAILED:
-                update = {"count": 0, "updated_at": now, "locked_until": now + LOCKOUT}
-            await db.login_attempts.update_one({"identifier": identifier}, {"$set": update}, upsert=True)
+            for identifier, limit in limits.items():
+                count = attempts[identifier] + 1
+                update = {"count": count, "updated_at": now, "locked_until": None}
+                if count >= limit:
+                    update = {"count": 0, "updated_at": now, "locked_until": now + LOCKOUT}
+                await db.login_attempts.update_one({"identifier": identifier}, {"$set": update}, upsert=True)
             raise HTTPException(status_code=401, detail="Invalid email or password.")
-        await db.login_attempts.delete_one({"identifier": identifier})
+        await db.login_attempts.delete_many({"identifier": {"$in": list(limits)}})
         _issue(response, str(user["_id"]))
         return _public_user(user)
+
+    @router.get("/me")
+    async def me(request: Request):
+        return await get_current_user(request)
 
     @router.post("/refresh")
     async def refresh(request: Request, response: Response):

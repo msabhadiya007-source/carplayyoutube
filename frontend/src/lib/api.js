@@ -16,7 +16,8 @@ api.interceptors.response.use(
   async (error) => {
     const cfg = error.config;
     const url = cfg?.url || "";
-    if (error.response?.status !== 401 || !cfg || cfg._retried || url.startsWith("/auth/")) {
+    const noRetry = ["/auth/login", "/auth/register", "/auth/refresh", "/auth/logout"].includes(url);
+    if (error.response?.status !== 401 || !cfg || cfg._retried || noRetry) {
       return Promise.reject(error);
     }
     cfg._retried = true;

@@ -99,7 +99,8 @@ export default function CarPlayer() {
   });
 
   // ---- Persist effects ----
-  useEffect(() => storage.setRecent(recent), [recent]);
+  const recentOwner = useRef("local");
+  useEffect(() => storage.setRecent(recentOwner.current, recent), [recent]);
   useEffect(() => storage.setCarMode(carMode), [carMode]);
   useEffect(() => storage.setFitMode(fitMode), [fitMode]);
   useEffect(() => storage.setVolume(volume), [volume]);
@@ -109,6 +110,9 @@ export default function CarPlayer() {
   useEffect(() => {
     if (prevOwner.current === owner) return;
     prevOwner.current = owner;
+    recentOwner.current = owner;
+    setRecent(storage.getRecent(owner));
+    playedRef.current = new Set();
     setStandalone(currentVideo);
     setCurrentIndex(-1);
     setPromptVideo(null);

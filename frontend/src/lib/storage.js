@@ -52,8 +52,8 @@ export const storage = {
   getQueue: () => read("queue", []),
   setQueue: (v) => write("queue", v),
 
-  getRecent: () => read("recent", []),
-  setRecent: (v) => write("recent", v),
+  getRecent: (owner = "local") => read(owner === "local" ? "recent" : `recent:${owner}`, []),
+  setRecent: (owner, v) => write(owner === "local" ? "recent" : `recent:${owner}`, v),
 
   getVisited: () => read("visited", false),
   setVisited: (v) => write("visited", v),
