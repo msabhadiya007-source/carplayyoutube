@@ -40,7 +40,7 @@ export default function HomeScreen({
             style={{ color: "var(--text-secondary)" }}
           >
             Search YouTube and start listening. Built for cars, wide displays and
-            touch — no account needed.
+            touch. Sign in to search and sync your queue.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-4">

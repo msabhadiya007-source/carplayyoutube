@@ -1,0 +1,42 @@
+{
+  "summary": "Iteration 4 - auth + per-user Mongo data. CRITICAL bug found & fixed by tester: GET /api/auth/me did not exist (404) although AuthContext calls it on load -> every page reload signed the user out. Added the route in auth.py (returns get_current_user). After fix: backend 19/19 pytest pass (register 200/409/422, login httpOnly access+refresh cookies, /auth/me cookie + Bearer fallback, refresh (refresh token rejected as access), logout clears session, lockout 429 after 5 fails on throwaway account, youtube search/video 401 unauth / 200 auth, status public, /me/data defaults, PUT queue validates 11-char id + dedupes, merge dedupes, settings quality 422 on invalid + persistence, 2-user isolation incl. ignored user_id param). bcrypt hash verified $2b$12$. Frontend all requested flows pass: logged-out Sign in button, Search opens auth-dialog ('Sign in to search YouTube.'), auth-error for wrong password and duplicate register, login closes dialog, session survives reload, search -> add-to-queue-prompt shown while playback continues, Add -> badge 1 & server queue 1; settings-account email, autoplay-related disabled when logged out, quality buttons + disclaimer, prompt toggle OFF -> search result auto-added (queue 1->2), settings persisted in Mongo and after reload; Next at end of queue -> toast 'Autoplay: Soft Jazz Piano...' and similar video played; logout -> signin shown, account queue not shown (local empty), /auth/me 401; seeded localStorage cpyt:queue + register new user -> server/drawer queue [LOCAL_A, LOCAL_B], no leak of driver's items; queue reorder/remove/clear (persisted to server); deep link /watch/M7lc1UVf-VE logged out loads iframe; fit modes, car mode, share toast, close-video back to home, /screen-size all work.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/auth/me", "issue": "Route was missing (404) -> frontend lost session on every reload. FIXED by testing agent in /app/backend/auth.py; main agent please keep it.", "priority": "CRITICAL"}
+    ],
+    "minor": [
+      {"endpoint": "CORS middleware", "issue": "CORS_ORIGINS='*' with allow_credentials=True -> Starlette reflects ANY Origin (verified Origin: https://evil.com gets access-control-allow-origin: https://evil.com + allow-credentials:true). Set explicit origins (frontend URL) per auth playbook."},
+      {"endpoint": "POST /api/auth/login", "issue": "Lockout identifier uses first X-Forwarded-For value, which is client-spoofable -> attacker can rotate XFF to bypass the per IP+email lockout. Consider also an email-only counter or trusted proxy handling."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Recently played across accounts", "issue": "Recently played list (LocalStorage) is not account-scoped: after logout / registering another user on the same device, the previous account's recently played videos are still shown on home. Consider clearing on logout or scoping per owner.", "affected_selectors": ["home-screen recent list"]},
+      {"flow": "Session refresh", "issue": "api.js interceptor skips refresh for any url starting with /auth/, so if access token (15m) is expired but refresh (7d) valid when the app loads, GET /auth/me 401 -> user shown as signed out instead of silently refreshing. Exempt /auth/me from the skip (only skip /auth/login,/auth/register,/auth/refresh).", "affected_selectors": ["header-signin-btn"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_auth_userdata.py", "/app/test_reports/pytest/pytest_auth.xml"],
+  "action_items": [
+    "Keep the added GET /api/auth/me route in auth.py (was missing)",
+    "Fix api.js 401 interceptor so /auth/me triggers refresh (otherwise users are logged out after 15 min on reload despite 7d refresh token)",
+    "Set explicit CORS_ORIGINS instead of '*' with credentials",
+    "Optionally harden lockout against X-Forwarded-For spoofing",
+    "Scope or clear 'Recently played' on logout/account switch"
+  ],
+  "critical_code_review_comments": [
+    "auth.py: missing /me route (fixed). No seed_admin present (not required - test user pre-exists).",
+    "CarPlayer.jsx is 768 lines (>700) - consider splitting playback/prompt/autoplay logic into hooks.",
+    "youtube_search/youtube_video are sync def using blocking requests -> run in threadpool by FastAPI, OK; async dependency works fine.",
+    "useAccountData: merge marks per-owner merged in localStorage; local queue is not cleared after merge, so on logout the local queue reappears (acceptable per spec but worth confirming)."
+  ],
+  "updated_files": ["/app/backend/auth.py", "/app/backend/tests/test_auth_userdata.py"],
+  "success_rate": {"backend": "100% (19/19) after /auth/me fix", "frontend": "100% of requested flows (with noted minor issues)"},
+  "test_credentials": "driver@carplayyoutube.com / Drive2026! (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Created throwaway users qa+<hex>@carplayyoutube.com and qa+ui59518@carplayyoutube.com. Driver settings reset to defaults; driver queue contains 3 jazz/lofi items from testing.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run pytest /app/backend/tests/test_auth_userdata.py with REACT_APP_BACKEND_URL exported. Embedded YouTube iframe shows 'Video unavailable' in headless browser - environment limitation, player still initializes (duration loads). Sonner toasts last ~4s - poll quickly for 'Autoplay:' toast.",
+  "rca of the issue": "AuthContext.jsx calls api.get('/auth/me') on mount, but create_auth() never registered a GET /me route -> 404 -> catch sets user=false. Login worked in-session because login response sets user directly, masking the bug until reload. Fix: added @router.get('/me') returning await get_current_user(request)."
+}
