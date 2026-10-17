@@ -10,11 +10,17 @@ import SearchOverlay from "./SearchOverlay";
 import QueueDrawer from "./QueueDrawer";
 import SettingsPanel from "./SettingsPanel";
 import HomeScreen from "./HomeScreen";
+import AuthDialog from "./AuthDialog";
+import AddToQueuePrompt from "./AddToQueuePrompt";
 
 import { useYouTubePlayer } from "../hooks/useYouTubePlayer";
 import { useAutoHide } from "../hooks/useAutoHide";
+import { useAccountData } from "../hooks/useAccountData";
+import { useAuth } from "../context/AuthContext";
 import { storage } from "../lib/storage";
-import { getYoutubeStatus, getVideo, humanizeApiError } from "../lib/youtube";
+import { getYoutubeStatus, getVideo, humanizeApiError, searchYoutube, relatedQuery } from "../lib/youtube";
+
+const VIDEO_ID_RE = /^[A-Za-z0-9_-]{11}$/;
 
 const PLAYER_ID = "yt-player";
 
@@ -33,13 +39,23 @@ export default function CarPlayer() {
   const { videoId: routeVideoId } = useParams();
   const navigate = useNavigate();
 
-  // Persisted state
-  const [queue, setQueue] = useState(() => storage.getQueue());
+  // Account-scoped (MongoDB when signed in, LocalStorage when signed out)
+  const { user, logout } = useAuth();
+  const { queue, prefs, owner, setQueue, setPref } = useAccountData(user);
+  const { autoplayNext, autoplayRelated, promptAddToQueue, quality } = prefs;
   const [currentIndex, setCurrentIndex] = useState(-1);
+  // A video playing that is not (yet) part of the queue.
+  const [standalone, setStandalone] = useState(null);
+  const [promptVideo, setPromptVideo] = useState(null);
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authReason, setAuthReason] = useState("");
+  const playedRef = useRef(new Set());
+  const relatedBusy = useRef(false);
+
+  // Device-local state
   const [recent, setRecent] = useState(() => storage.getRecent());
   const [carMode, setCarMode] = useState(() => storage.getCarMode());
   const [fitMode, setFitMode] = useState(() => storage.getFitMode());
-  const [autoplayNext, setAutoplayNext] = useState(() => storage.getAutoplayNext());
   const [volume, setVolumeState] = useState(() => storage.getVolume());
   const [muted, setMuted] = useState(() => storage.getMuted());
 
@@ -69,9 +85,10 @@ export default function CarPlayer() {
   const progressTimer = useRef(null);
   const seekingRef = useRef(false);
 
-  const currentVideo = currentIndex >= 0 && currentIndex < queue.length ? queue[currentIndex] : null;
+  const currentVideo =
+    standalone || (currentIndex >= 0 && currentIndex < queue.length ? queue[currentIndex] : null);
   const hasVideo = !!currentVideo;
-  const anyOverlay = searchOpen || queueOpen || settingsOpen;
+  const anyOverlay = searchOpen || queueOpen || settingsOpen || authOpen;
   const shortScreen = vp.h < 500 || carMode;
   const isPortrait = vp.w < vp.h && vp.w < 768;
 
@@ -82,12 +99,31 @@ export default function CarPlayer() {
   });
 
   // ---- Persist effects ----
-  useEffect(() => storage.setQueue(queue), [queue]);
   useEffect(() => storage.setRecent(recent), [recent]);
   useEffect(() => storage.setCarMode(carMode), [carMode]);
   useEffect(() => storage.setFitMode(fitMode), [fitMode]);
-  useEffect(() => storage.setAutoplayNext(autoplayNext), [autoplayNext]);
   useEffect(() => storage.setVolume(volume), [volume]);
+
+  // When the account changes (sign in / out), keep the playing video but detach it from the old queue.
+  const prevOwner = useRef(owner);
+  useEffect(() => {
+    if (prevOwner.current === owner) return;
+    prevOwner.current = owner;
+    setStandalone(currentVideo);
+    setCurrentIndex(-1);
+    setPromptVideo(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [owner]);
+
+  const openAuth = useCallback((reason = "") => {
+    setAuthReason(reason);
+    setAuthOpen(true);
+  }, []);
+
+  const openSearch = useCallback(() => {
+    if (user) setSearchOpen(true);
+    else openAuth("Sign in to search YouTube.");
+  }, [user, openAuth]);
   useEffect(() => storage.setMuted(muted), [muted]);
 
   useEffect(() => {
@@ -159,14 +195,14 @@ export default function CarPlayer() {
         setLoading(true);
       } else if (state === 0) {
         setIsPlaying(false);
-        handleVideoEnded();
+        endedRef.current();
       } else if (state === 5) {
         setLoading(false);
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [autoplayNext, queue, currentIndex]
+    []
   );
+  const endedRef = useRef(() => {});
 
   const onPlayerError = useCallback(() => {
     setLoading(false);
@@ -188,10 +224,16 @@ export default function CarPlayer() {
     setLoading(true);
     setCurrentTime(0);
     setDuration(currentVideo.durationSeconds || 0);
-    yt.load(currentVideo.videoId);
+    yt.load(currentVideo.videoId, quality);
+    playedRef.current.add(currentVideo.videoId);
     addRecent(currentVideo);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentVideo?.videoId, yt.ready]);
+
+  useEffect(() => {
+    if (yt.ready) yt.setQuality(quality);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quality, yt.ready]);
 
   // ---- Progress polling ----
   useEffect(() => {
@@ -211,28 +253,84 @@ export default function CarPlayer() {
     if (!routeVideoId) return;
     getVideo(routeVideoId)
       .then((video) => playNow(video))
-      .catch((err) => toast.error(humanizeApiError(err)));
+      .catch((err) => {
+        // Signed-out deep links still play; metadata lookup requires an account.
+        if (err?.response?.status === 401 && VIDEO_ID_RE.test(routeVideoId)) {
+          playNow({
+            videoId: routeVideoId,
+            title: "YouTube video",
+            channelTitle: "",
+            thumbnail: `https://i.ytimg.com/vi/${routeVideoId}/mqdefault.jpg`,
+          });
+        } else {
+          toast.error(humanizeApiError(err));
+        }
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routeVideoId]);
 
   // ---- Playback actions ----
   const playNow = useCallback(
     (video) => {
-      setQueue((prev) => {
-        const existing = prev.findIndex((v) => v.videoId === video.videoId);
-        if (existing >= 0) {
-          setCurrentIndex(existing);
-          return prev;
-        }
-        const next = [...prev, video];
-        setCurrentIndex(next.length - 1);
-        return next;
-      });
+      const idx = queue.findIndex((v) => v.videoId === video.videoId);
+      if (idx >= 0) {
+        setStandalone(null);
+        setCurrentIndex(idx);
+        setPromptVideo(null);
+      } else if (promptAddToQueue) {
+        setStandalone(video);
+        setPromptVideo(video);
+      } else {
+        setStandalone(null);
+        setQueue((prev) => [...prev, video]);
+        setCurrentIndex(queue.length);
+      }
       setSearchOpen(false);
       setQueueOpen(false);
     },
-    []
+    [queue, promptAddToQueue, setQueue]
   );
+
+  const acceptPrompt = useCallback(() => {
+    const v = promptVideo;
+    setPromptVideo(null);
+    if (!v) return;
+    const idx = queue.findIndex((q) => q.videoId === v.videoId);
+    if (idx < 0) setQueue((prev) => [...prev, v]);
+    if (standalone?.videoId === v.videoId) {
+      setStandalone(null);
+      setCurrentIndex(idx >= 0 ? idx : queue.length);
+    }
+    toast.success("Added to queue");
+  }, [promptVideo, queue, standalone, setQueue]);
+
+  const dismissPrompt = useCallback(() => setPromptVideo(null), []);
+
+  const canAutoplayRelated = !!(user && autoplayRelated && currentVideo);
+
+  const playRelated = useCallback(async () => {
+    if (relatedBusy.current || !currentVideo) return;
+    relatedBusy.current = true;
+    try {
+      const res = await searchYoutube(relatedQuery(currentVideo));
+      const skip = new Set([
+        ...playedRef.current,
+        ...queue.map((v) => v.videoId),
+        ...recent.map((v) => v.videoId),
+      ]);
+      const pick = res.items.find((v) => !skip.has(v.videoId));
+      if (!pick) {
+        toast("No more similar videos found");
+        return;
+      }
+      toast(`Autoplay: ${pick.title}`);
+      playNow(pick);
+    } catch (err) {
+      toast.error(humanizeApiError(err));
+    } finally {
+      relatedBusy.current = false;
+    }
+  }, [currentVideo, queue, recent, playNow]);
 
   const addToQueue = useCallback((video) => {
     setQueue((prev) => {
@@ -243,46 +341,57 @@ export default function CarPlayer() {
       toast.success("Added to queue");
       return [...prev, video];
     });
-  }, []);
+  }, [setQueue]);
 
   const handlePlayPause = useCallback(() => {
     if (!hasVideo) {
-      setSearchOpen(true);
+      openSearch();
       return;
     }
     if (isPlaying) yt.pause();
     else yt.play();
     show();
-  }, [hasVideo, isPlaying, yt, show]);
+  }, [hasVideo, isPlaying, yt, show, openSearch]);
+
+  const goToIndex = useCallback((i) => {
+    setStandalone(null);
+    setCurrentIndex(i);
+  }, []);
 
   const handleNext = useCallback(() => {
-    if (currentIndex < queue.length - 1) {
-      setCurrentIndex((i) => i + 1);
+    if (currentIndex + 1 < queue.length) {
+      goToIndex(currentIndex + 1);
+    } else if (canAutoplayRelated) {
+      playRelated();
     } else {
       toast("End of queue");
     }
     show();
-  }, [currentIndex, queue.length, show]);
+  }, [currentIndex, queue.length, show, goToIndex, canAutoplayRelated, playRelated]);
 
   const handlePrev = useCallback(() => {
     const t = yt.getCurrentTime();
     if (t > 5) {
       yt.seekTo(0);
       setCurrentTime(0);
-    } else if (currentIndex > 0) {
-      setCurrentIndex((i) => i - 1);
+    } else if (standalone && currentIndex >= 0 && currentIndex < queue.length) {
+      goToIndex(currentIndex);
+    } else if (!standalone && currentIndex > 0) {
+      goToIndex(currentIndex - 1);
     } else {
       yt.seekTo(0);
       setCurrentTime(0);
     }
     show();
-  }, [yt, currentIndex, show]);
+  }, [yt, currentIndex, show, standalone, queue.length, goToIndex]);
 
-  const handleVideoEnded = useCallback(() => {
-    if (autoplayNext && currentIndex < queue.length - 1) {
-      setCurrentIndex((i) => i + 1);
+  endedRef.current = () => {
+    if (autoplayNext && currentIndex + 1 < queue.length) {
+      goToIndex(currentIndex + 1);
+    } else if (canAutoplayRelated) {
+      playRelated();
     }
-  }, [autoplayNext, currentIndex, queue.length]);
+  };
 
   const handleSeek = useCallback(
     (sec) => {
@@ -351,15 +460,16 @@ export default function CarPlayer() {
         return cur;
       });
     },
-    []
+    [setQueue]
   );
 
   const clearQueue = useCallback(() => {
     setQueue([]);
     setCurrentIndex(-1);
+    setStandalone(null);
     setIsPlaying(false);
     toast("Queue cleared");
-  }, []);
+  }, [setQueue]);
 
   const clearRecent = useCallback(() => {
     setRecent([]);
@@ -380,7 +490,7 @@ export default function CarPlayer() {
       if (from > cur && to <= cur) return cur + 1;
       return cur;
     });
-  }, []);
+  }, [setQueue]);
 
   const shareCurrent = useCallback(async () => {
     if (!currentVideo) return;
@@ -405,6 +515,8 @@ export default function CarPlayer() {
     yt.pause();
     setIsPlaying(false);
     setCurrentIndex(-1);
+    setStandalone(null);
+    setPromptVideo(null);
     setPlayerError(null);
     if (routeVideoId) navigate("/");
   }, [yt, navigate, routeVideoId]);
@@ -484,7 +596,8 @@ export default function CarPlayer() {
               Skip to next
             </button>
             <button
-              onClick={() => setSearchOpen(true)}
+              data-testid="player-error-search-btn"
+              onClick={openSearch}
               className="px-6 h-12 rounded-xl font-medium"
               style={{ border: "1px solid rgba(255,255,255,0.14)" }}
             >
@@ -500,7 +613,7 @@ export default function CarPlayer() {
           firstTime={firstTime}
           shortScreen={shortScreen}
           recent={recent}
-          onOpenSearch={() => setSearchOpen(true)}
+          onOpenSearch={openSearch}
           onEnterCarMode={enterCarMode}
           onPlayRecent={playNow}
         />
@@ -513,7 +626,9 @@ export default function CarPlayer() {
         carMode={carMode}
         hasVideo={hasVideo}
         queueCount={queue.length}
-        onOpenSearch={() => setSearchOpen(true)}
+        user={user}
+        onSignIn={() => openAuth()}
+        onOpenSearch={openSearch}
         onOpenQueue={() => setQueueOpen(true)}
         onOpenSettings={() => setSettingsOpen(true)}
         onCloseVideo={closeCurrentVideo}
@@ -560,10 +675,10 @@ export default function CarPlayer() {
       <QueueDrawer
         open={queueOpen}
         queue={queue}
-        currentIndex={currentIndex}
+        currentIndex={standalone ? -1 : currentIndex}
         onClose={() => setQueueOpen(false)}
         onPlayIndex={(i) => {
-          setCurrentIndex(i);
+          goToIndex(i);
           setQueueOpen(false);
         }}
         onRemove={removeFromQueue}
@@ -575,6 +690,17 @@ export default function CarPlayer() {
         carMode={carMode}
         fitMode={fitMode}
         autoplayNext={autoplayNext}
+        prefs={prefs}
+        onSetPref={setPref}
+        user={user}
+        onSignIn={() => {
+          setSettingsOpen(false);
+          openAuth();
+        }}
+        onSignOut={async () => {
+          await logout();
+          toast("Signed out");
+        }}
         volume={volume}
         onClose={() => setSettingsOpen(false)}
         onToggleCarMode={(v) => {
@@ -583,11 +709,14 @@ export default function CarPlayer() {
           else if (isFullscreen) exitFs();
         }}
         onSetFitMode={setFitMode}
-        onToggleAutoplay={setAutoplayNext}
+        onToggleAutoplay={(v) => setPref("autoplayNext", v)}
         onVolume={handleVolume}
         onClearQueue={clearQueue}
         onClearRecent={clearRecent}
       />
+
+      {hasVideo && <AddToQueuePrompt video={promptVideo} onAdd={acceptPrompt} onDismiss={dismissPrompt} />}
+      <AuthDialog open={authOpen} reason={authReason} onClose={() => setAuthOpen(false)} />
 
       {/* Portrait notice (non-blocking) */}
       {isPortrait && !portraitDismissed && (

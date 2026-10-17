@@ -1,14 +1,15 @@
-import axios from "axios";
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+import { api } from "./api";
 
 // Short-lived client cache to avoid repeat identical search requests (quota protection).
 const _cache = new Map();
 const CACHE_TTL = 120_000; // 2 minutes
 
+export function clearSearchCache() {
+  _cache.clear();
+}
+
 export async function getYoutubeStatus() {
-  const { data } = await axios.get(`${API}/youtube/status`);
+  const { data } = await api.get("/youtube/status");
   return data; // { configured: bool }
 }
 
@@ -18,7 +19,7 @@ export async function searchYoutube(query, pageToken) {
   if (hit && Date.now() - hit.t < CACHE_TTL) {
     return hit.data;
   }
-  const { data } = await axios.get(`${API}/youtube/search`, {
+  const { data } = await api.get("/youtube/search", {
     params: { q: query, ...(pageToken ? { pageToken } : {}) },
   });
   _cache.set(key, { t: Date.now(), data });
@@ -26,12 +27,24 @@ export async function searchYoutube(query, pageToken) {
 }
 
 export async function getVideo(videoId) {
-  const { data } = await axios.get(`${API}/youtube/video/${videoId}`);
+  const { data } = await api.get(`/youtube/video/${videoId}`);
   return data;
+}
+
+// Build a "similar videos" query from the current video's title + channel.
+export function relatedQuery(video) {
+  const words = (video.title || "")
+    .replace(/\(.*?\)|\[.*?\]|official|video|lyrics?|hd|4k|\|.*$/gi, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 1)
+    .slice(0, 5)
+    .join(" ");
+  return `${words} ${video.channelTitle || ""}`.trim() || video.channelTitle || "music";
 }
 
 // Translate backend error detail into the exact human-readable messages per spec.
 export function humanizeApiError(err) {
+  if (err?.response?.status === 401) return "Please sign in to search YouTube.";
   const detail = err?.response?.data?.detail;
   switch (detail) {
     case "NETWORK_ERROR":

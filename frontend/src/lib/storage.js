@@ -31,8 +31,23 @@ export const storage = {
   getMuted: () => read("muted", false),
   setMuted: (v) => write("muted", v),
 
-  getAutoplayNext: () => read("autoplayNext", true),
-  setAutoplayNext: (v) => write("autoplayNext", v),
+  getPrefs: () => ({
+    autoplayNext: read("autoplayNext", true),
+    autoplayRelated: false,
+    promptAddToQueue: read("promptAddToQueue", true),
+    quality: read("quality", "auto"),
+  }),
+  setPrefs: (p) => {
+    write("autoplayNext", p.autoplayNext);
+    write("promptAddToQueue", p.promptAddToQueue);
+    write("quality", p.quality);
+  },
+
+  hasMerged: (uid) => read("mergedUsers", []).includes(uid),
+  markMerged: (uid) => {
+    const list = read("mergedUsers", []);
+    if (!list.includes(uid)) write("mergedUsers", [...list, uid]);
+  },
 
   getQueue: () => read("queue", []),
   setQueue: (v) => write("queue", v),

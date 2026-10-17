@@ -1,5 +1,5 @@
 import React from "react";
-import { Search, ListMusic, Settings, Car, ChevronLeft } from "lucide-react";
+import { Search, ListMusic, Settings, Car, ChevronLeft, Lock, LogIn } from "lucide-react";
 
 export default function Header({
   visible,
@@ -7,6 +7,8 @@ export default function Header({
   carMode,
   hasVideo,
   queueCount,
+  user,
+  onSignIn,
   onOpenSearch,
   onOpenQueue,
   onOpenSettings,
@@ -64,12 +66,12 @@ export default function Header({
       <div className="flex items-center gap-2 sm:gap-3">
         <HeaderButton
           testId="header-search-btn"
-          label="Search"
+          label={user ? "Search" : "Sign in to search"}
           short={shortScreen}
           onClick={onOpenSearch}
           primary
         >
-          <Search size={shortScreen ? 20 : 22} />
+          {user ? <Search size={shortScreen ? 20 : 22} /> : <Lock size={shortScreen ? 18 : 20} />}
           {!shortScreen && <span className="hidden md:inline text-sm font-medium">Search</span>}
         </HeaderButton>
 
@@ -109,6 +111,24 @@ export default function Header({
         >
           <Settings size={shortScreen ? 20 : 22} />
         </HeaderButton>
+
+        {user ? (
+          <HeaderButton testId="header-account-btn" label={`Account: ${user.email}`} short={shortScreen} onClick={onOpenSettings}>
+            <span
+              className="flex items-center justify-center rounded-full font-semibold text-sm"
+              style={{ width: 28, height: 28, background: "var(--accent)", color: "#050507" }}
+            >
+              {(user.name || user.email)[0].toUpperCase()}
+            </span>
+          </HeaderButton>
+        ) : (
+          user === false && (
+            <HeaderButton testId="header-signin-btn" label="Sign in" short={shortScreen} onClick={onSignIn}>
+              <LogIn size={shortScreen ? 20 : 22} />
+              {!shortScreen && <span className="hidden md:inline text-sm font-medium">Sign in</span>}
+            </HeaderButton>
+          )
+        )}
       </div>
     </header>
   );

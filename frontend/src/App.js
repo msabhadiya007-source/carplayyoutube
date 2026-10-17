@@ -3,10 +3,12 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Toaster } from "sonner";
 import CarPlayer from "@/components/CarPlayer";
 import ScreenSizeMode from "@/components/ScreenSizeMode/ScreenSizeMode";
+import { AuthProvider } from "@/context/AuthContext";
 
 function App() {
   return (
     <div className="App">
+      <AuthProvider>
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<CarPlayer />} />
@@ -15,6 +17,7 @@ function App() {
           <Route path="/screen-size" element={<ScreenSizeMode />} />
         </Routes>
       </BrowserRouter>
+      </AuthProvider>
       <Toaster
         theme="dark"
         position="top-center"

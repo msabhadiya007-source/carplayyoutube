@@ -1,6 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { X, Car, Crop, Maximize2, Square, Trash2, History, Monitor } from "lucide-react";
+import { X, Car, Crop, Maximize2, Square, Trash2, History, Monitor, LogIn, LogOut, UserCircle2 } from "lucide-react";
 
 const FIT_MODES = [
   { id: "fit", label: "Fit", icon: Square, hint: "Whole video" },
@@ -8,11 +8,18 @@ const FIT_MODES = [
   { id: "crop", label: "Crop", icon: Crop, hint: "Max screen" },
 ];
 
+const QUALITIES = ["auto", "low", "medium", "high"];
+
 export default function SettingsPanel({
   open,
   carMode,
   fitMode,
   autoplayNext,
+  prefs,
+  onSetPref,
+  user,
+  onSignIn,
+  onSignOut,
   volume,
   onClose,
   onToggleCarMode,
@@ -60,6 +67,8 @@ export default function SettingsPanel({
         </div>
 
         <div className="flex-1 overflow-y-auto no-scrollbar p-5 space-y-6">
+          <AccountRow user={user} onSignIn={onSignIn} onSignOut={onSignOut} />
+
           {/* Car Mode */}
           <Row label="Car Mode" hint="Maximize player & controls">
             <ToggleSwitch testId="setting-carmode" checked={carMode} onChange={onToggleCarMode} />
@@ -98,6 +107,55 @@ export default function SettingsPanel({
           <Row label="Autoplay Next" hint="Play next queue item when a video ends">
             <ToggleSwitch testId="setting-autoplay" checked={autoplayNext} onChange={onToggleAutoplay} />
           </Row>
+
+          <Row
+            label="Autoplay Similar"
+            hint={user ? "When the queue ends, play a similar video" : "Sign in to use (needs search)"}
+          >
+            <ToggleSwitch
+              testId="setting-autoplay-related"
+              checked={!!user && prefs.autoplayRelated}
+              disabled={!user}
+              onChange={(v) => onSetPref("autoplayRelated", v)}
+            />
+          </Row>
+
+          <Row label="Ask to Add to Queue" hint="Prompt when playing a video not in your queue">
+            <ToggleSwitch
+              testId="setting-prompt-add"
+              checked={prefs.promptAddToQueue}
+              onChange={(v) => onSetPref("promptAddToQueue", v)}
+            />
+          </Row>
+
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] mb-3" style={{ color: "var(--text-secondary)" }}>
+              Preferred Quality
+            </p>
+            <div className="grid grid-cols-4 gap-2">
+              {QUALITIES.map((q) => {
+                const active = prefs.quality === q;
+                return (
+                  <button
+                    key={q}
+                    data-testid={`quality-${q}`}
+                    onClick={() => onSetPref("quality", q)}
+                    className="h-12 rounded-xl text-sm font-medium capitalize transition-transform active:scale-95"
+                    style={{
+                      background: active ? "var(--accent)" : "var(--bg-surface-2)",
+                      color: active ? "#050507" : "#fff",
+                      border: "1px solid rgba(255,255,255,0.1)",
+                    }}
+                  >
+                    {q}
+                  </button>
+                );
+              })}
+            </div>
+            <p data-testid="quality-disclaimer" className="text-xs mt-2" style={{ color: "var(--text-secondary)" }}>
+              Sent to YouTube as a preference only. YouTube may pick a different quality based on your connection and screen size.
+            </p>
+          </div>
 
           {/* Volume */}
           <div>
@@ -179,14 +237,47 @@ function Row({ label, hint, children }) {
   );
 }
 
-function ToggleSwitch({ checked, onChange, testId }) {
+function AccountRow({ user, onSignIn, onSignOut }) {
+  const btn = "flex items-center gap-2 h-12 px-4 rounded-xl text-sm font-medium shrink-0 transition-transform active:scale-95";
+  return (
+    <div
+      data-testid="settings-account"
+      className="flex items-center justify-between gap-3 p-4 rounded-xl"
+      style={{ background: "var(--bg-surface-2)", border: "1px solid rgba(255,255,255,0.08)" }}
+    >
+      <div className="flex items-center gap-3 min-w-0">
+        <UserCircle2 size={28} style={{ color: "var(--accent)" }} />
+        <div className="min-w-0">
+          <p data-testid="settings-account-email" className="text-base font-medium truncate">
+            {user ? user.email : "Not signed in"}
+          </p>
+          <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+            {user ? "Queue & settings synced to your account" : "Queue is saved on this device only"}
+          </p>
+        </div>
+      </div>
+      {user ? (
+        <button data-testid="logout-button" onClick={onSignOut} className={btn} style={{ border: "1px solid rgba(255,255,255,0.14)" }}>
+          <LogOut size={18} /> Sign out
+        </button>
+      ) : (
+        <button data-testid="settings-signin-btn" onClick={onSignIn} className={btn} style={{ background: "var(--accent)", color: "#050507" }}>
+          <LogIn size={18} /> Sign in
+        </button>
+      )}
+    </div>
+  );
+}
+
+function ToggleSwitch({ checked, onChange, testId, disabled }) {
   return (
     <button
       data-testid={testId}
       role="switch"
       aria-checked={checked}
+      disabled={disabled}
       onClick={() => onChange(!checked)}
-      className="relative rounded-full transition-colors duration-200 shrink-0"
+      className="relative rounded-full transition-colors duration-200 shrink-0 disabled:opacity-40"
       style={{
         width: 60,
         height: 34,

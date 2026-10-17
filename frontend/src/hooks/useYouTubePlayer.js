@@ -21,6 +21,8 @@ function loadYouTubeApi() {
   return apiPromise;
 }
 
+const QUALITY_MAP = { auto: "default", low: "small", medium: "large", high: "hd1080" };
+
 /**
  * Manages a single YT.Player instance mounted into `containerId`.
  */
@@ -72,11 +74,13 @@ export function useYouTubePlayer({ containerId, onStateChange, onError, onReady 
   }, [containerId]);
 
   const api = {
-    load: useCallback((videoId) => {
+    load: useCallback((videoId, quality = "auto") => {
       if (playerRef.current && playerRef.current.loadVideoById) {
-        playerRef.current.loadVideoById(videoId);
+        playerRef.current.loadVideoById({ videoId, suggestedQuality: QUALITY_MAP[quality] || "default" });
       }
     }, []),
+    // YouTube treats this as a hint only (may be ignored).
+    setQuality: useCallback((q) => playerRef.current?.setPlaybackQuality?.(QUALITY_MAP[q] || "default"), []),
     play: useCallback(() => playerRef.current?.playVideo?.(), []),
     pause: useCallback(() => playerRef.current?.pauseVideo?.(), []),
     seekTo: useCallback((s) => playerRef.current?.seekTo?.(s, true), []),

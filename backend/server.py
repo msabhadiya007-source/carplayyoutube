@@ -1,10 +1,11 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Query
+from fastapi import FastAPI, APIRouter, HTTPException, Query, Depends
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import re
+import html
 import time
 import logging
 from pathlib import Path
@@ -20,6 +21,11 @@ load_dotenv(ROOT_DIR / '.env')
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
+
+from auth import create_auth  # noqa: E402
+from user_data import create_user_data_router  # noqa: E402
+
+auth_router, get_current_user, ensure_indexes = create_auth(db)
 
 app = FastAPI(title="CarPlayYouTube API")
 api_router = APIRouter(prefix="/api")
@@ -117,6 +123,7 @@ def youtube_search(
     q: str = Query(..., min_length=1, max_length=100),
     maxResults: int = 20,
     pageToken: Optional[str] = None,
+    _user: dict = Depends(get_current_user),
 ):
     q = q.strip()
     if not q:
@@ -161,8 +168,8 @@ def youtube_search(
         secs = durations.get(vid)
         results.append(VideoItem(
             videoId=vid,
-            title=snip.get("title", ""),
-            channelTitle=snip.get("channelTitle", ""),
+            title=html.unescape(snip.get("title", "")),
+            channelTitle=html.unescape(snip.get("channelTitle", "")),
             thumbnail=pick_thumbnail(snip.get("thumbnails", {})),
             duration=format_duration(secs) if secs else None,
             durationSeconds=secs,
@@ -174,7 +181,7 @@ def youtube_search(
 
 
 @api_router.get("/youtube/video/{video_id}", response_model=VideoItem)
-def youtube_video(video_id: str):
+def youtube_video(video_id: str, _user: dict = Depends(get_current_user)):
     data = youtube_get("videos", {
         "part": "snippet,contentDetails",
         "id": video_id,
@@ -187,8 +194,8 @@ def youtube_video(video_id: str):
     secs = iso_duration_to_seconds(it.get("contentDetails", {}).get("duration", ""))
     return VideoItem(
         videoId=video_id,
-        title=snip.get("title", ""),
-        channelTitle=snip.get("channelTitle", ""),
+        title=html.unescape(snip.get("title", "")),
+        channelTitle=html.unescape(snip.get("channelTitle", "")),
         thumbnail=pick_thumbnail(snip.get("thumbnails", {})),
         duration=format_duration(secs) if secs else None,
         durationSeconds=secs,
@@ -196,6 +203,8 @@ def youtube_video(video_id: str):
     )
 
 
+api_router.include_router(auth_router)
+api_router.include_router(create_user_data_router(db, get_current_user))
 app.include_router(api_router)
 
 app.add_middleware(
@@ -211,6 +220,11 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+@app.on_event("startup")
+async def startup():
+    await ensure_indexes()
 
 
 @app.on_event("shutdown")
