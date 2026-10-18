@@ -14,26 +14,28 @@ export function AuthProvider({ children }) {
       .catch(() => setUser(false));
   }, []);
 
-  const login = useCallback(async (email, password) => {
-    const { data } = await api.post("/auth/login", { email, password });
-    setUser(data);
-    return data;
-  }, []);
+const login = useCallback(async (email, password) => {
+  const { data } = await api.post("/auth/login", { email, password });
+  setAccessToken(data.access_token);
+  setUser(data.user);
+  return data;
+}, []);
 
-  const register = useCallback(async (email, password, name) => {
-    const { data } = await api.post("/auth/register", { email, password, name });
-    setUser(data);
-    return data;
-  }, []);
+const register = useCallback(async (email, password, name) => {
+  const { data } = await api.post("/auth/register", { email, password, name });
+  setAccessToken(data.access_token);
+  setUser(data.user);
+  return data;
+}, []);
 
   const logout = useCallback(async () => {
     try {
       await api.post("/auth/logout");
-    } finally {
-      clearSearchCache();
-      setUser(false);
-    }
-  }, []);
+} finally {
+  clearAccessToken();
+  clearSearchCache();
+  setUser(false);
+}
 
   return (
     <AuthContext.Provider value={{ user, login, register, logout }}>{children}</AuthContext.Provider>
