@@ -1,7 +1,8 @@
 import axios from "axios";
 
+const API_BASE = `${process.env.REACT_APP_BACKEND_URL || ""}/api`;
 export const api = axios.create({
-  baseURL: `${process.env.REACT_APP_BACKEND_URL}/api`,
+  baseURL: API_BASE,
   withCredentials: true,
 });
 
@@ -10,24 +11,61 @@ export function setAuthLostHandler(fn) {
   onAuthLost = fn;
 }
 
-let refreshing = null;
+let accessToken = null;
+let refreshPromise = null;
+
+export function setAccessToken(token) {
+  accessToken = token || null;
+}
+
+export function getAccessToken() {
+  return accessToken;
+}
+
+export function clearAccessToken() {
+  accessToken = null;
+}
+
+api.interceptors.request.use((config) => {
+  const token = accessToken;
+  if (token && !config.headers?.Authorization) {
+    config.headers = config.headers || {};
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 api.interceptors.response.use(
   (res) => res,
   async (error) => {
     const cfg = error.config;
-    const url = cfg?.url || "";
+    if (!cfg) return Promise.reject(error);
+
+    const url = cfg.url || "";
     const noRetry = ["/auth/login", "/auth/register", "/auth/refresh", "/auth/logout"].includes(url);
-    if (error.response?.status !== 401 || !cfg || cfg._retried || noRetry) {
+
+    if (error.response?.status !== 401 || cfg._retried || noRetry) {
       return Promise.reject(error);
     }
-    cfg._retried = true;
+
     try {
-      refreshing = refreshing || api.post("/auth/refresh").finally(() => (refreshing = null));
-      await refreshing;
-      return api(cfg);
-    } catch {
+      if (!refreshPromise) {
+        refreshPromise = api.post("/auth/refresh").then((res) => {
+          const nextAccess = res?.data?.access_token;
+          if (nextAccess) setAccessToken(nextAccess);
+          return res;
+        }).finally(() => {
+          refreshPromise = null;
+        });
+      }
+
+      await refreshPromise;
+      cfg._retried = true;
+      return api.request({ ...cfg, _retried: true });
+    } catch (refreshError) {
+      clearAccessToken();
       onAuthLost();
-      return Promise.reject(error);
+      return Promise.reject(refreshError);
     }
   }
 );
