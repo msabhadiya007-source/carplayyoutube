@@ -50,7 +50,7 @@ def _set_cookie(response: Response, key: str, value: str, ttl: timedelta):
         value=value,
         httponly=True,
         secure=COOKIE_SECURE,
-        samesite="lax",
+        samesite="none",
         max_age=int(ttl.total_seconds()),
         path="/",
     )
