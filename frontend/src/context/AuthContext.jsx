@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
-import { api, setAuthLostHandler, setAccessToken, clearAccessToken } from "../lib/api";import { clearSearchCache } from "../lib/youtube";
+import { api, setAuthLostHandler, setAccessToken, clearAccessToken } from "../lib/api";
 const AuthContext = createContext(null);
 
 // user: null = checking, false = signed out, object = signed in
