@@ -49,6 +49,7 @@ YOUTUBE_API_KEY="YOUR_API_KEY_HERE"
 ### 2. Environment variables
 
 - `backend/.env` — `MONGO_URL`, `DB_NAME`, `CORS_ORIGINS`, `YOUTUBE_API_KEY` (see `backend/.env.example`).
+- `REFRESH_TTL_DAYS` — optional refresh-session lifetime in days (defaults to `365`). Refresh tokens rotate and extend the session when the user is active; signing out revokes the current refresh token.
 - `frontend/.env` — `REACT_APP_BACKEND_URL` (pre-configured; the frontend only ever calls this backend, never googleapis.com directly).
 
 **CORS (production):** `CORS_ORIGINS` is read from the environment (comma-separated). For
