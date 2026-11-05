@@ -13,7 +13,8 @@ from pydantic import BaseModel, EmailStr, Field
 
 JWT_ALGORITHM = "HS256"
 ACCESS_TTL = timedelta(minutes=15)
-REFRESH_TTL = timedelta(days=7)
+REFRESH_TTL_DAYS = max(1, int(os.environ.get("REFRESH_TTL_DAYS", "365")))
+REFRESH_TTL = timedelta(days=REFRESH_TTL_DAYS)
 MAX_FAILED = 5
 MAX_FAILED_PER_EMAIL = 20
 LOCKOUT = timedelta(minutes=15)
@@ -261,8 +262,8 @@ def create_auth(db):
                 # ignore decode errors during logout
                 pass
         # delete cookies client-side
-        response.delete_cookie("access_token", path="/", secure=COOKIE_SECURE, httponly=True, samesite="lax")
-        response.delete_cookie("refresh_token", path="/", secure=COOKIE_SECURE, httponly=True, samesite="lax")
+        response.delete_cookie("access_token", path="/", secure=COOKIE_SECURE, httponly=True, samesite="none")
+        response.delete_cookie("refresh_token", path="/", secure=COOKIE_SECURE, httponly=True, samesite="none")
         return {"ok": True}
 
     async def ensure_indexes():
