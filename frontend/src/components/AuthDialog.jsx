@@ -7,7 +7,8 @@ import { LOGIN, REGISTER } from "../constants/testIds/auth";
 export default function AuthDialog({ open, reason, onClose }) {
   const { login, register } = useAuth();
   const [mode, setMode] = useState("login");
-  const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [form, setForm] = useState(() => ({ name: "", email: localStorage.getItem("carplayyoutube.rememberedEmail") || "", password: "" }));
+  const [rememberMe, setRememberMe] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
@@ -24,9 +25,13 @@ export default function AuthDialog({ open, reason, onClose }) {
     setBusy(true);
     setError(null);
     try {
-      if (isLogin) await login(form.email, form.password);
+      if (isLogin) {
+        await login(form.email, form.password, rememberMe);
+        if (rememberMe) localStorage.setItem("carplayyoutube.rememberedEmail", form.email.trim());
+        else localStorage.removeItem("carplayyoutube.rememberedEmail");
+      }
       else await register(form.email, form.password, form.name);
-      setForm({ name: "", email: "", password: "" });
+      setForm((current) => ({ ...current, name: "", password: "" }));
       onClose();
     } catch (err) {
       setError(err.response ? formatApiErrorDetail(err.response.data?.detail) : "Unable to connect. Please try again.");
@@ -79,7 +84,7 @@ export default function AuthDialog({ open, reason, onClose }) {
           required
           value={form.email}
           onChange={set("email")}
-          autoComplete="email"
+          autoComplete="username"
         />
         <Field
           testId={isLogin ? LOGIN.passwordInput : REGISTER.passwordInput}
@@ -91,6 +96,13 @@ export default function AuthDialog({ open, reason, onClose }) {
           onChange={set("password")}
           autoComplete={isLogin ? "current-password" : "new-password"}
         />
+
+        {isLogin && (
+          <label className="flex items-center gap-2 text-sm cursor-pointer select-none" style={{ color: "var(--text-secondary)" }}>
+            <input type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} className="h-4 w-4 accent-[var(--accent)]" data-testid="remember-me" />
+            <span>Remember me</span>
+          </label>
+        )}
 
         {error && (
           <p data-testid="auth-error" className="text-sm rounded-lg px-3 py-2" style={{ background: "rgba(255,69,58,0.12)", color: "var(--danger)" }}>

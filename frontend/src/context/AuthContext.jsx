@@ -33,10 +33,11 @@ export function AuthProvider({ children }) {
       .catch(() => setUser(false));
   }, []);
 
-  const login = useCallback(async (email, password) => {
+  const login = useCallback(async (email, password, rememberMe = true) => {
     const { data } = await api.post("/auth/login", {
       email,
       password,
+      remember_me: rememberMe,
     });
 
     setAccessToken(data.access_token);
