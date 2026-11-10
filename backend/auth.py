@@ -45,16 +45,19 @@ def _token(user_id: str, kind: str, ttl: timedelta, jti: Optional[str] = None) -
     return jwt.encode(payload, _secret(), algorithm=JWT_ALGORITHM)
 
 
-def _set_cookie(response: Response, key: str, value: str, ttl: timedelta):
-    response.set_cookie(
-        key=key,
-        value=value,
-        httponly=True,
-        secure=COOKIE_SECURE,
-        samesite="none",
-        max_age=int(ttl.total_seconds()),
-        path="/",
-    )
+def _set_cookie(response: Response, key: str, value: str, ttl: timedelta, persistent: bool = True):
+    cookie_options = {
+        "key": key,
+        "value": value,
+        "httponly": True,
+        "secure": COOKIE_SECURE,
+        "samesite": "none",
+        "path": "/",
+    }
+    # Without Max-Age the browser treats this as a session cookie.
+    if persistent:
+        cookie_options["max_age"] = int(ttl.total_seconds())
+    response.set_cookie(**cookie_options)
 
 
 async def _create_refresh_record(db, user_id: str, jti: str, expires_at: datetime):
@@ -112,6 +115,7 @@ class RegisterBody(BaseModel):
 class LoginBody(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=128)
+    remember_me: bool = True
 
 
 def create_auth(db):
@@ -164,7 +168,7 @@ def create_auth(db):
 
         # set cookies for compatibility with existing tests / clients
         _set_cookie(response, "access_token", access, ACCESS_TTL)
-        _set_cookie(response, "refresh_token", refresh, REFRESH_TTL)
+        _set_cookie(response, "refresh_token", refresh, REFRESH_TTL, persistent=body.remember_me)
 
         return {"access_token": access, "refresh_token": refresh, "token_type": "bearer", "expires_in": int(ACCESS_TTL.total_seconds()), "user": _public_user(doc)}
 
@@ -201,7 +205,7 @@ def create_auth(db):
         await _create_refresh_record(db, user_id, refresh_jti, datetime.now(timezone.utc) + REFRESH_TTL)
 
         _set_cookie(response, "access_token", access, ACCESS_TTL)
-        _set_cookie(response, "refresh_token", refresh, REFRESH_TTL)
+        _set_cookie(response, "refresh_token", refresh, REFRESH_TTL, persistent=body.remember_me)
 
         return {"access_token": access, "refresh_token": refresh, "token_type": "bearer", "expires_in": int(ACCESS_TTL.total_seconds()), "user": _public_user(user)}
 
@@ -233,7 +237,12 @@ def create_auth(db):
 
         # rotate: issue new refresh token and record
         new_jti = str(uuid.uuid4())
-        new_refresh = _token(str(user_objid), "refresh", REFRESH_TTL, jti=new_jti)
+        persistent = payload.get("persistent", True)
+        new_refresh = jwt.encode(
+            {"sub": str(user_objid), "type": "refresh", "exp": datetime.now(timezone.utc) + REFRESH_TTL,
+             "jti": new_jti, "persistent": persistent},
+            _secret(), algorithm=JWT_ALGORITHM
+        )
         await _create_refresh_record(db, str(user_objid), new_jti, datetime.now(timezone.utc) + REFRESH_TTL)
 
         # issue new access token
@@ -241,7 +250,7 @@ def create_auth(db):
 
         # set cookies for compatibility
         _set_cookie(response, "access_token", access, ACCESS_TTL)
-        _set_cookie(response, "refresh_token", new_refresh, REFRESH_TTL)
+        _set_cookie(response, "refresh_token", new_refresh, REFRESH_TTL, persistent=persistent)
 
         return {"access_token": access, "refresh_token": new_refresh, "token_type": "bearer", "expires_in": int(ACCESS_TTL.total_seconds()), "user": _public_user(user)}
 
