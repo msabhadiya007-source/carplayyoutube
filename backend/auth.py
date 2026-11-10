@@ -110,6 +110,7 @@ class RegisterBody(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
     name: Optional[str] = Field(default="", max_length=60)
+    remember_me: bool = True
 
 
 class LoginBody(BaseModel):
@@ -205,10 +206,14 @@ def create_auth(db):
         user_id = str(user["_id"])
         access = _token(user_id, "access", ACCESS_TTL)
         refresh_jti = str(uuid.uuid4())
-        refresh = _token(user_id, "refresh", REFRESH_TTL, jti=refresh_jti)
+        refresh = jwt.encode(
+            {"sub": user_id, "type": "refresh", "exp": datetime.now(timezone.utc) + REFRESH_TTL,
+             "jti": refresh_jti, "persistent": body.remember_me},
+            _secret(), algorithm=JWT_ALGORITHM
+        )
         await _create_refresh_record(db, user_id, refresh_jti, datetime.now(timezone.utc) + REFRESH_TTL)
 
-        _set_cookie(response, "access_token", access, ACCESS_TTL)
+        _set_cookie(response, "access_token", access, ACCESS_TTL, persistent=body.remember_me)
         _set_cookie(response, "refresh_token", refresh, REFRESH_TTL, persistent=body.remember_me)
 
         return {"access_token": access, "refresh_token": refresh, "token_type": "bearer", "expires_in": int(ACCESS_TTL.total_seconds()), "user": _public_user(user)}

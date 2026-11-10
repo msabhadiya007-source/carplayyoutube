@@ -27,10 +27,35 @@ export function AuthProvider({ children }) {
       setUser(false);
     });
 
-    api
-      .get("/auth/me")
-      .then(({ data }) => setUser(data))
-      .catch(() => setUser(false));
+    let active = true;
+
+    const restoreSession = async () => {
+      // Access tokens are short-lived. On every app start, rotate the
+      // persistent refresh cookie first so returning users stay signed in.
+      try {
+        const { data: refreshed } = await api.post("/auth/refresh");
+        if (refreshed?.access_token) setAccessToken(refreshed.access_token);
+      } catch {
+        // A refresh cookie may be absent/expired while the access cookie
+        // is still valid, so still try /me before declaring the user signed out.
+      }
+
+      try {
+        const { data } = await api.get("/auth/me");
+        if (active) setUser(data);
+      } catch {
+        if (active) {
+          clearAccessToken();
+          setUser(false);
+        }
+      }
+    };
+
+    restoreSession();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   const login = useCallback(async (email, password, rememberMe = true) => {
