@@ -171,7 +171,7 @@ def create_auth(db):
         await _create_refresh_record(db, user_id, refresh_jti, datetime.now(timezone.utc) + REFRESH_TTL)
 
         # set cookies for compatibility with existing tests / clients
-        _set_cookie(response, "access_token", access, ACCESS_TTL)
+        _set_cookie(response, "access_token", access, ACCESS_TTL, persistent=body.remember_me)
         _set_cookie(response, "refresh_token", refresh, REFRESH_TTL, persistent=body.remember_me)
 
         return {"access_token": access, "refresh_token": refresh, "token_type": "bearer", "expires_in": int(ACCESS_TTL.total_seconds()), "user": _public_user(doc)}
@@ -253,7 +253,7 @@ def create_auth(db):
         access = _token(str(user_objid), "access", ACCESS_TTL)
 
         # set cookies for compatibility
-        _set_cookie(response, "access_token", access, ACCESS_TTL)
+        _set_cookie(response, "access_token", access, ACCESS_TTL, persistent=persistent)
         _set_cookie(response, "refresh_token", new_refresh, REFRESH_TTL, persistent=persistent)
 
         return {"access_token": access, "refresh_token": new_refresh, "token_type": "bearer", "expires_in": int(ACCESS_TTL.total_seconds()), "user": _public_user(user)}
