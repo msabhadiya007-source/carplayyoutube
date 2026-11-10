@@ -163,7 +163,11 @@ def create_auth(db):
         user_id = str(res.inserted_id)
         access = _token(user_id, "access", ACCESS_TTL)
         refresh_jti = str(uuid.uuid4())
-        refresh = _token(user_id, "refresh", REFRESH_TTL, jti=refresh_jti)
+        refresh = jwt.encode(
+            {"sub": user_id, "type": "refresh", "exp": datetime.now(timezone.utc) + REFRESH_TTL,
+             "jti": refresh_jti, "persistent": body.remember_me},
+            _secret(), algorithm=JWT_ALGORITHM
+        )
         await _create_refresh_record(db, user_id, refresh_jti, datetime.now(timezone.utc) + REFRESH_TTL)
 
         # set cookies for compatibility with existing tests / clients
