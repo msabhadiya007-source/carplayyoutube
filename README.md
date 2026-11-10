@@ -90,3 +90,10 @@ restrictions.
 
 The frontend is a standard React build deployable to Vercel, Netlify, Cloudflare Pages, etc.
 The backend is a FastAPI service. Set `YOUTUBE_API_KEY` as an environment variable on the host.
+
+## Login persistence and browser password autofill
+
+- **Remember me** keeps the user signed in using the backend's persistent `HttpOnly` refresh-token cookie. It stores the email address only in browser LocalStorage.
+- Passwords are deliberately **not** stored by the website in LocalStorage or JavaScript. The login form now has standard input `name` and `autocomplete` attributes so a browser password manager can offer to save and autofill credentials. Whether APTV Browser exposes or retains its password manager is controlled by APTV/iOS, not this website.
+- The frontend and API must use HTTPS. If the API is on another origin, set `CORS_ORIGINS` to the exact frontend origin(s), comma-separated, and retain credential support. Prefer frontend and API hostnames under the same registrable domain (for example, `www.example.com` and `api.example.com`) so the refresh cookie is not treated as a cross-site third-party cookie by WebKit privacy protections.
+- A browser that clears website cookies/storage when its app closes cannot be forced by website code to retain a login. In that case, use an APTV setting/version that retains website data, or serve the API same-site and retest. Do not save plaintext passwords as a workaround.
